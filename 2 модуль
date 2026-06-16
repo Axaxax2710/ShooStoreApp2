@@ -1,0 +1,207 @@
+using System;
+using System.Data;
+using System.Data.SqlClient;
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace ShoeStoreApp
+{
+    class DB
+    {
+        public static string ConnectionString = @"Server=(localdb)\MSSQLLocalDB;Database=ShoeStoreDB;Trusted_Connection=True;";
+
+        public static DataTable Query(string sql)
+        {
+            DataTable dt = new DataTable();
+            using (SqlConnection conn = new SqlConnection(ConnectionString))
+            {
+                conn.Open();
+                SqlDataAdapter da = new SqlDataAdapter(sql, conn);
+                da.Fill(dt);
+            }
+            return dt;
+        }
+
+        public static void Execute(string sql)
+        {
+            using (SqlConnection conn = new SqlConnection(ConnectionString))
+            {
+                conn.Open();
+                SqlCommand cmd = new SqlCommand(sql, conn);
+                cmd.ExecuteNonQuery();
+            }
+        }
+    }
+
+    class User
+    {
+        public static string Role { get; set; }
+        public static string Name { get; set; }
+    }
+
+    public class LoginForm : Form
+    {
+        private TextBox txtLogin;
+        private TextBox txtPassword;
+        private Button btnLogin;
+        private Button btnGuest;
+
+        public LoginForm()
+        {
+            this.Text = "Вход в систему";
+            this.Size = new Size(300, 200);
+            this.StartPosition = FormStartPosition.CenterScreen;
+
+            txtLogin = new TextBox() { Left = 100, Top = 30, Width = 150 };
+            txtPassword = new TextBox() { Left = 100, Top = 60, Width = 150, PasswordChar = '*' };
+            btnLogin = new Button() { Text = "Войти", Left = 100, Top = 100, Width = 70 };
+            btnGuest = new Button() { Text = "Гость", Left = 180, Top = 100, Width = 70 };
+
+            Label lblLogin = new Label() { Text = "Логин:", Left = 30, Top = 33 };
+            Label lblPass = new Label() { Text = "Пароль:", Left = 30, Top = 63 };
+
+            btnLogin.Click += BtnLogin_Click;
+            btnGuest.Click += BtnGuest_Click;
+
+            this.Controls.Add(txtLogin);
+            this.Controls.Add(txtPassword);
+            this.Controls.Add(btnLogin);
+            this.Controls.Add(btnGuest);
+            this.Controls.Add(lblLogin);
+            this.Controls.Add(lblPass);
+        }
+
+        private void BtnLogin_Click(object sender, EventArgs e)
+        {
+            string sql = $"SELECT Role, FullName FROM Users WHERE Login='{txtLogin.Text}' AND Password='{txtPassword.Text}'";
+            DataTable dt = DB.Query(sql);
+
+            if (dt.Rows.Count > 0)
+            {
+                User.Role = dt.Rows[0]["Role"].ToString();
+                User.Name = dt.Rows[0]["FullName"].ToString();
+                MainForm main = new MainForm();
+                main.Show();
+                this.Hide();
+            }
+            else
+            {
+                MessageBox.Show("Неверный логин или пароль!");
+            }
+        }
+
+        private void BtnGuest_Click(object sender, EventArgs e)
+        {
+            User.Role = "Гость";
+            User.Name = "Гость";
+            MainForm main = new MainForm();
+            main.Show();
+            this.Hide();
+        }
+    }
+
+    public class MainForm : Form
+    {
+        private DataTable allProducts;
+        private DataGridView dgv;
+        private TextBox txtSearch;
+        private ComboBox cbSupplier;
+        private Button btnSortAsc, btnSortDesc;
+        private bool sortAsc = false, sortDesc = false;
+
+        public MainForm()
+        {
+            this.Text = $"{User.Name} ({User.Role})";
+            this.Size = new Size(900, 550);
+            this.StartPosition = FormStartPosition.CenterScreen;
+
+            Panel panel = new Panel() { Height = 45, Dock = DockStyle.Top };
+
+            txtSearch = new TextBox() { Width = 150, Left = 10, Top = 10 };
+            cbSupplier = new ComboBox() { Width = 120, Left = 170, Top = 10 };
+            btnSortAsc = new Button() { Text = "↑ Количество", Left = 300, Top = 10, Width = 100 };
+            btnSortDesc = new Button() { Text = "↓ Количество", Left = 410, Top = 10, Width = 100 };
+
+            Label lblSearch = new Label() { Text = "Поиск:", Left = 10, Top = 15 };
+            Label lblFilter = new Label() { Text = "Поставщик:", Left = 170, Top = 15 };
+
+            panel.Controls.Add(txtSearch);
+            panel.Controls.Add(cbSupplier);
+            panel.Controls.Add(btnSortAsc);
+            panel.Controls.Add(btnSortDesc);
+            panel.Controls.Add(lblSearch);
+            panel.Controls.Add(lblFilter);
+
+            dgv = new DataGridView() { Dock = DockStyle.Fill, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells };
+            this.Controls.Add(dgv);
+            this.Controls.Add(panel);
+
+            LoadData();
+
+            txtSearch.TextChanged += (s, e) => ApplyFilter();
+            cbSupplier.SelectedIndexChanged += (s, e) => ApplyFilter();
+            btnSortAsc.Click += (s, e) => { sortAsc = true; sortDesc = false; ApplyFilter(); };
+            btnSortDesc.Click += (s, e) => { sortDesc = true; sortAsc = false; ApplyFilter(); };
+        }
+
+        private void LoadData()
+        {
+            allProducts = DB.Query("SELECT * FROM Products");
+
+            DataTable suppliers = DB.Query("SELECT DISTINCT Supplier FROM Products WHERE Supplier IS NOT NULL");
+            cbSupplier.Items.Clear();
+            cbSupplier.Items.Add("Все");
+            foreach (DataRow row in suppliers.Rows)
+            {
+                string sup = row["Supplier"].ToString();
+                if (!string.IsNullOrEmpty(sup)) cbSupplier.Items.Add(sup);
+            }
+            cbSupplier.SelectedIndex = 0;
+
+            ApplyFilter();
+        }
+
+        private void ApplyFilter()
+        {
+            string filter = "";
+
+            if (!string.IsNullOrEmpty(txtSearch.Text))
+            {
+                filter = $"Name LIKE '%{txtSearch.Text}%'";
+            }
+
+            if (cbSupplier.SelectedIndex > 0 && cbSupplier.Text != "Все")
+            {
+                if (!string.IsNullOrEmpty(filter)) filter += " AND ";
+                filter += $"Supplier = '{cbSupplier.Text}'";
+            }
+
+            DataView dv = allProducts.DefaultView;
+            dv.RowFilter = filter;
+
+            if (sortAsc) dv.Sort = "Quantity ASC";
+            else if (sortDesc) dv.Sort = "Quantity DESC";
+
+            dgv.DataSource = dv;
+
+            foreach (DataGridViewRow row in dgv.Rows)
+            {
+                if (row.Cells["Quantity"].Value != null && Convert.ToInt32(row.Cells["Quantity"].Value) == 0)
+                    row.DefaultCellStyle.BackColor = Color.LightBlue;
+                if (row.Cells["Discount"].Value != null && Convert.ToDecimal(row.Cells["Discount"].Value) > 15)
+                    row.DefaultCellStyle.BackColor = Color.LightGreen;
+            }
+        }
+    }
+
+    static class Program
+    {
+        [STAThread]
+        static void Main()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new LoginForm());
+        }
+    }
+}

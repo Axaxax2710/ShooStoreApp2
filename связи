@@ -1,0 +1,9 @@
+
+№	Откуда (внешний ключ)	Куда (первичный ключ)	Что связывает
+1	Products.CategoryId	→ Categories.Id	Товар → категория
+2	Products.ManufacturerId	→ Manufacturers.Id	Товар → производитель
+3	Products.SupplierId	→ Suppliers.Id	Товар → поставщик
+4	Orders.ProductId	→ Products.Id	Заказ → товар
+5	Orders.UserId	→ Users.Id	Заказ → пользователь
+6	OrderArt.OrderId	→ Orders.Id	Состав заказа → заказ
+7	OrderArt.ProductId	→ Products.Id	Состав заказа → товар
